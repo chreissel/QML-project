@@ -1,6 +1,18 @@
 # load important libraries
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
+
+# Arguments for functions
+import argparse
+parser = argparse.ArgumentParser(description="Preselection & Train/Test Split of Samples")
+parser.add_argument('--path', help = "path from where to read/store files")
+args = parser.parse_args()
+if not args.path.endswith('/'):
+    path = args.path + "/"
+else:
+    path = args.path
+
 
 # definition of features/selections
 met_feats = ["phi","pt","px","py"]
@@ -10,11 +22,11 @@ jet_feats = ["pt","eta","phi","en","px","py","pz","btag"]
 njets = 7
 nleps = 1
 
-selection = "nleps == 1"
+selection = "nleps == 1 & (nbtags >= 2) & (njets >= 4)"
 
 
 # produce flat numpy arrays
-def flat_numpy(filename):
+def flat_numpy(filename, is_signal=True):
 
     # read in dataframes
     df = pd.read_hdf(filename)
@@ -69,13 +81,24 @@ def flat_numpy(filename):
     print('making flat features...')
     flata = np.hstack(flats)
 
-    return flata
+    nevents = flata.shape[0]
+    if is_signal:
+        y = np.ones(nevents)
+    else:
+        y = np.zeros(nevents)
+    
+    return flata,y
 
 
-nevents = 100000
+sig,y_sig = flat_numpy(path+"dataSig.h5")
+bkg,y_bkg = flat_numpy(path+"dataBkg.h5",is_signal = False)
+X = np.concatenate((sig,bkg), axis=0)
+y = np.concatenate((y_sig,y_bkg), axis=0)
 
-sig = flat_numpy("dataSig.h5")
-bkg = flat_numpy("dataBkg.h5")
-comb = np.concatenate((sig[:nevents,:],bkg[:nevents,:]), axis=0)
-np.save("inputs",comb)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=True)
+
+np.save(path+"X_train",X_train)
+np.save(path+"X_test",X_test)
+np.save(path+"y_train",y_train)
+np.save(path+"y_test",y_test)
 
