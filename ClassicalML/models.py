@@ -73,8 +73,22 @@ class BDT():
 # FFWD DNN (identical settings as before, but now in pytorch)
 class FFWD(nn.Module):
 
-    def __init__(self, layers):
+    def __init__(self, layers,error = nn.BCELoss(),lr = 2e-3,lr_decay = 0.04,n_epochs=100):
         super(FFWD, self).__init__()
+
+        # make sure to run on the correct hardware
+        self.device = ('cuda' if torch.cuda.is_available() else 'cpu')
+
+        if self.device == 'cuda':
+            self.batch_size = 10000
+        else:
+            self.batch_size = 528    
+ 
+        self.error = error
+        self.lr = lr
+        self.lr_decay = lr_decay
+        self.n_epochs = n_epochs
+
 
         torch_layers = []
 
@@ -98,4 +112,58 @@ class FFWD(nn.Module):
     def forward(self, x):
         x = self.ffwd(x)
         return x
+
+    # training procedure
+    def train(self, error, optimizer, n_epochs, data):
+        self.ffwd.train()
+        for epoch in range(1, n_epochs + 1):
+            loss_epoch = 0
+            batch = 0
+            tot_batch = len(data)
+            for d in data:
+                x,y = d
+                x = x.to(self.device)
+                y = y.to(self.device)
+
+                optimizer.zero_grad()
+                output = self.ffwd(x)
+                loss = error(output, y)
+                loss_epoch += loss.item()
+                loss.backward()
+                optimizer.step()
+                batch += 1
+
+                if batch % 10 == 0:
+                    print(f'batch {batch}/{tot_batch}')
+
+            loss_epoch = loss_epoch/float(tot_batch)
+            if epoch % 1 == 0:
+                print(f'############################# epoch {epoch} \t Loss: {loss_epoch:.4g} ##############################')
+
+    def fit(self, X_train, y_train):
+
+        tensor_x = torch.Tensor(X_train)
+        tensor_y = torch.Tensor(y_train)
+        dataset = torch.utils.data.TensorDataset(tensor_x,tensor_y)
+
+        ffwd = self.ffwd.to(self.device)
+        print(ffwd)
+
+        error = nn.BCELoss()
+        print("Learning rate: {0}, Learning rate decay: {1}".format(self.lr, self.lr_decay))
+        optimizer = optim.Adagrad(ffwd.parameters(),lr=self.lr,lr_decay=self.lr_decay)
+        print(ffwd.parameters())
+
+        data_loader = torch.utils.data.DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+        print("start training now")
+        self.train(error=error, optimizer=optimizer, n_epochs=self.n_epochs, data=data_loader)
+
+
+    def predict(self, X_test):
+        X_test_device = torch.from_numpy(X_test).to(self.device)
+        with torch.no_grad():
+            pred = self.ffwd(X_test_device.float())
+        pred = pred.cpu().numpy()
+        return pred
+
 
