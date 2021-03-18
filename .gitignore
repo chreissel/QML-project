@@ -1,0 +1,7 @@
+*.png
+*.pdf
+*.npy
+*.log
+*.out
+*_pycache_*
+*.txt
